@@ -319,21 +319,30 @@
 
     // Function to handle the search input and filter appointments
     function handleSearch() {
-        const searchTerm = (patientNameInput.value.trim() + ' ' + contactNumberInput.value.trim()).toLowerCase();
-        
-        if (searchTerm.length === 0) {
-            // Hide the history section if the search bar is empty
+        const nameTerm = patientNameInput.value.trim().toLowerCase();
+        const contactTerm = contactNumberInput.value.trim().toLowerCase();
+
+        // If both fields are empty, hide the history section
+        if (!nameTerm && !contactTerm) {
             patientHistorySection.classList.add('hidden');
-        } else {
-            // Filter appointments based on the search term
-            const filteredAppointments = allAppointments.filter(appt => 
-                appt.patientName.toLowerCase().includes(searchTerm) || 
-                (appt.contactNumber && appt.contactNumber.toLowerCase().includes(searchTerm))
-            );
-            // Display the history section with the filtered results
-            patientHistorySection.classList.remove('hidden');
-            displayAppointments(filteredAppointments, patientHistoryResults);
+            return;
         }
+
+        // Get all search words from both inputs
+        const searchWords = (nameTerm + ' ' + contactTerm).split(/\s+/).filter(word => word.length > 0);
+
+        const filteredAppointments = allAppointments.filter(appt => {
+            const patientNameLower = appt.patientName.toLowerCase();
+            const contactNumberLower = appt.contactNumber ? appt.contactNumber.toLowerCase() : '';
+            
+            // Check if every search word is present in either the patient's name or contact number
+            return searchWords.every(word => 
+                patientNameLower.includes(word) || contactNumberLower.includes(word)
+            );
+        });
+
+        patientHistorySection.classList.remove('hidden');
+        displayAppointments(filteredAppointments, patientHistoryResults);
     }
 
     // Setup real-time listener for appointments
