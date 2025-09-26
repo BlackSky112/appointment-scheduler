@@ -319,9 +319,10 @@
     function handleSearch() {
         const searchTerm = (patientNameInput.value.trim() + ' ' + contactNumberInput.value.trim()).toLowerCase();
 
-        // If search term is empty, hide the history section
+        // If search term is empty, hide the history section AND clear the table.
         if (searchTerm.length === 0) {
             patientHistorySection.classList.add('hidden');
+            patientHistoryTableBody.innerHTML = ''; // Explicitly clear the table body
             return;
         }
 
@@ -487,3 +488,4 @@
 </script>
 </body>
 </html>
+
