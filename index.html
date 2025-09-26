@@ -319,30 +319,29 @@
 
     // Function to handle the search input and filter appointments
     function handleSearch() {
-        const nameTerm = patientNameInput.value.trim().toLowerCase();
-        const contactTerm = contactNumberInput.value.trim().toLowerCase();
+        const searchTerm = (patientNameInput.value.trim() + ' ' + contactNumberInput.value.trim()).toLowerCase();
 
-        // If both fields are empty, hide the history section
-        if (!nameTerm && !contactTerm) {
+        // If search term is empty, hide the history section
+        if (searchTerm.length === 0) {
             patientHistorySection.classList.add('hidden');
             return;
         }
 
-        // Get all search words from both inputs
-        const searchWords = (nameTerm + ' ' + contactTerm).split(/\s+/).filter(word => word.length > 0);
+        const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
 
         const filteredAppointments = allAppointments.filter(appt => {
             const patientNameLower = appt.patientName.toLowerCase();
             const contactNumberLower = appt.contactNumber ? appt.contactNumber.toLowerCase() : '';
             
-            // Check if every search word is present in either the patient's name or contact number
-            return searchWords.every(word => 
-                patientNameLower.includes(word) || contactNumberLower.includes(word)
-            );
+            // Check if every search word exists in the combined name or contact
+            return searchWords.every(word => {
+                const combinedData = (patientNameLower + ' ' + contactNumberLower);
+                return combinedData.includes(word);
+            });
         });
 
         patientHistorySection.classList.remove('hidden');
-        displayAppointments(filteredAppointments, patientHistoryResults);
+        displayAppointments(filteredAppointments, patientHistoryResults, false); // Pass false to hide delete button
     }
 
     // Setup real-time listener for appointments
@@ -363,7 +362,7 @@
             });
 
             // Sort all appointments by timestamp
-            allAppointments.sort((a, b) => a.timestamp.toDate() - b.timestamp.toDate());
+            allAppointments.sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate());
             
             // Display today's appointments in the main list
             const today = new Date();
@@ -373,10 +372,10 @@
                        apptDate.getMonth() === today.getMonth() &&
                        apptDate.getDate() === today.getDate();
             });
-            displayAppointments(todaysAppointments, todaysAppointmentsList);
+            displayAppointments(todaysAppointments, todaysAppointmentsList, true); // Pass true to show delete button
             
             // Display all appointments in the full history list
-            displayAppointments(allAppointments, allAppointmentsList);
+            displayAppointments(allAppointments, allAppointmentsList, true); // Pass true to show delete button
 
             // Re-run the search on every data change to update the displayed history
             handleSearch();
@@ -387,7 +386,7 @@
     }
 
     // Function to display appointments in the UI
-    function displayAppointments(appointments, containerElement) {
+    function displayAppointments(appointments, containerElement, showDeleteButton = true) {
         if (containerElement === todaysAppointmentsList) {
             loadingIndicator.classList.add('hidden');
         } else if (containerElement === allAppointmentsList) {
@@ -423,14 +422,14 @@
             containerElement.appendChild(dateHeader);
 
             appts.forEach(appointment => {
-                const appointmentCard = createAppointmentCard(appointment);
+                const appointmentCard = createAppointmentCard(appointment, showDeleteButton);
                 containerElement.appendChild(appointmentCard);
             });
         });
     }
 
     // Helper function to create an appointment card
-    function createAppointmentCard(appointment) {
+    function createAppointmentCard(appointment, showDeleteButton) {
         const datetime = appointment.timestamp.toDate();
         const formattedDate = datetime.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         const formattedDay = datetime.toLocaleDateString('en-US', { weekday: 'long' });
@@ -439,19 +438,28 @@
         const appointmentCard = document.createElement('div');
         appointmentCard.classList.add('bg-gray-50', 'rounded-lg', 'shadow-sm', 'p-4', 'flex', 'flex-col', 'md:flex-row', 'justify-between', 'items-start', 'md:items-center');
         
+        let deleteButtonHTML = '';
+        if (showDeleteButton) {
+            deleteButtonHTML = `
+                <button class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors duration-200">
+                    Delete
+                </button>
+            `;
+        }
+
         appointmentCard.innerHTML = `
             <div class="mb-2 md:mb-0">
                 <p class="text-lg font-semibold text-gray-800">${appointment.patientName}</p>
                 <p class="text-sm text-gray-600">${formattedDate} (${formattedDay}) at ${formattedTime}</p>
                 <p class="text-sm text-gray-600">Contact: ${appointment.contactNumber}</p>
             </div>
-            <button class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors duration-200">
-                Delete
-            </button>
+            ${deleteButtonHTML}
         `;
         
-        const deleteButton = appointmentCard.querySelector('button');
-        deleteButton.addEventListener('click', () => deleteAppointment(appointment.id));
+        if (showDeleteButton) {
+            const deleteButton = appointmentCard.querySelector('button');
+            deleteButton.addEventListener('click', () => deleteAppointment(appointment.id));
+        }
 
         return appointmentCard;
     }
@@ -465,3 +473,4 @@
 </script>
 </body>
 </html>
+
