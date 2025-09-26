@@ -126,6 +126,11 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="paginationControls" class="flex justify-between items-center mt-4">
+                    <button id="prevPageBtn" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 focus:outline-none">Previous</button>
+                    <span id="pageInfo" class="text-gray-600"></span>
+                    <button id="nextPageBtn" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 focus:outline-none">Next</button>
+                </div>
             </div>
         </div>
     </div>
@@ -172,6 +177,10 @@
     let app, auth, db, userId;
     let authReady = false;
     let allAppointments = []; // Store all appointments for client-side filtering
+    let filteredAppointments = []; // Store the filtered results for pagination
+    let currentPage = 1;
+    const patientsPerPage = 10;
+    const monthAbbreviations = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // UI Elements
     const authStatus = document.getElementById('auth-status');
@@ -189,6 +198,9 @@
     const contactNumberInput = document.getElementById('contactNumber');
     const patientHistorySection = document.getElementById('patientHistorySection');
     const patientHistoryTableBody = document.getElementById('patientHistoryTableBody');
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+    const pageInfo = document.getElementById('pageInfo');
 
     // Function to show the custom modal
     function showModal(message, type, onConfirm) {
@@ -328,7 +340,7 @@
 
         const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
 
-        const filteredAppointments = allAppointments.filter(appt => {
+        filteredAppointments = allAppointments.filter(appt => {
             const patientNameLower = appt.patientName.toLowerCase();
             const contactNumberLower = appt.contactNumber ? appt.contactNumber.toLowerCase() : '';
             
@@ -338,9 +350,27 @@
                 return combinedData.includes(word);
             });
         });
-
+        
+        currentPage = 1; // Reset to the first page for a new search
         patientHistorySection.classList.remove('hidden');
-        displayHistoryTable(filteredAppointments);
+        displayHistoryTable();
+    }
+
+    // Function to go to the next page
+    function nextPage() {
+        const totalPages = Math.ceil(filteredAppointments.length / patientsPerPage);
+        if (currentPage < totalPages) {
+            currentPage++;
+            displayHistoryTable();
+        }
+    }
+
+    // Function to go to the previous page
+    function prevPage() {
+        if (currentPage > 1) {
+            currentPage--;
+            displayHistoryTable();
+        }
     }
 
     // Setup real-time listener for appointments
@@ -417,18 +447,29 @@
         });
     }
 
-    // Function to display appointments in a compact table format
-    function displayHistoryTable(appointments) {
+    // Function to display appointments in a compact table format with pagination
+    function displayHistoryTable() {
         patientHistoryTableBody.innerHTML = ''; // Clear table body
 
-        if (appointments.length === 0) {
+        const totalPages = Math.ceil(filteredAppointments.length / patientsPerPage);
+        const start = (currentPage - 1) * patientsPerPage;
+        const end = start + patientsPerPage;
+        const appointmentsToShow = filteredAppointments.slice(start, end);
+
+        if (appointmentsToShow.length === 0) {
             patientHistoryTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-4">No matching history found.</td></tr>`;
+            prevPageBtn.disabled = true;
+            nextPageBtn.disabled = true;
+            pageInfo.textContent = '';
             return;
         }
 
-        appointments.forEach(appt => {
+        appointmentsToShow.forEach(appt => {
             const datetime = appt.timestamp.toDate();
-            const formattedDate = datetime.toLocaleDateString('en-US');
+            const day = datetime.getDate();
+            const month = monthAbbreviations[datetime.getMonth()];
+            const year = datetime.getFullYear();
+            const formattedDate = `${day < 10 ? '0' : ''}${day}-${month}-${year}`;
             const formattedTime = datetime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
             const row = document.createElement('tr');
@@ -441,6 +482,11 @@
             `;
             patientHistoryTableBody.appendChild(row);
         });
+
+        // Update pagination controls
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = currentPage === totalPages;
+        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
     }
 
     // Helper function to create an appointment card element
@@ -484,6 +530,8 @@
     appointmentForm.addEventListener('submit', addAppointment);
     patientNameInput.addEventListener('input', handleSearch);
     contactNumberInput.addEventListener('input', handleSearch);
+    prevPageBtn.addEventListener('click', prevPage);
+    nextPageBtn.addEventListener('click', nextPage);
 
 </script>
 </body>
