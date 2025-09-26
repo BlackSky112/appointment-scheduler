@@ -326,13 +326,13 @@
         try {
             if (editingDocId) {
                 // Update existing appointment
-                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'appointments', editingDocId);
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', editingDocId);
                 await updateDoc(docRef, appointmentData);
                 showModal("Appointment updated successfully!", "alert");
                 resetForm();
             } else {
                 // Add new appointment
-                const appointmentsColRef = collection(db, 'artifacts', appId, 'users', userId, 'appointments');
+                const appointmentsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'appointments');
                 await addDoc(appointmentsColRef, appointmentData);
                 showModal("Appointment booked successfully!", "alert");
                 appointmentForm.reset();
@@ -352,7 +352,7 @@
                     return;
                 }
                 try {
-                    const docRef = doc(db, 'artifacts', appId, 'users', userId, 'appointments', docId);
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', docId);
                     await deleteDoc(docRef);
                     showModal("Appointment deleted successfully!", "alert");
                 } catch (error) {
@@ -413,7 +413,7 @@
     function setupAppointmentListener() {
         if (!authReady || !userId) return;
 
-        const appointmentsColRef = collection(db, 'artifacts', appId, 'users', userId, 'appointments');
+        const appointmentsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'appointments');
 
         // Listen to real-time updates
         onSnapshot(appointmentsColRef, (querySnapshot) => {
