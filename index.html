@@ -111,8 +111,20 @@
             <!-- Patient History Results -->
             <div id="patientHistorySection" class="hidden">
                 <h3 class="text-2xl font-semibold text-gray-700 mb-4">Patient History</h3>
-                <div id="patientHistoryResults" class="space-y-4">
-                    <div class="text-center text-gray-500">Enter a patient name or contact to see their history.</div>
+                <div class="overflow-x-auto bg-gray-50 rounded-lg shadow-inner">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-200">
+                            <tr>
+                                <th scope="col" class="px-3 py-2 text-left font-medium text-gray-700 tracking-wider">Date</th>
+                                <th scope="col" class="px-3 py-2 text-left font-medium text-gray-700 tracking-wider">Time</th>
+                                <th scope="col" class="px-3 py-2 text-left font-medium text-gray-700 tracking-wider">Name</th>
+                                <th scope="col" class="px-3 py-2 text-left font-medium text-gray-700 tracking-wider">Contact</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patientHistoryTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows will be populated here by JavaScript -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -190,7 +202,7 @@
     const patientNameInput = document.getElementById('patientName');
     const contactNumberInput = document.getElementById('contactNumber');
     const patientHistorySection = document.getElementById('patientHistorySection');
-    const patientHistoryResults = document.getElementById('patientHistoryResults');
+    const patientHistoryTableBody = document.getElementById('patientHistoryTableBody');
 
     // Function to show the custom modal
     function showModal(message, type, onConfirm) {
@@ -341,7 +353,7 @@
         });
 
         patientHistorySection.classList.remove('hidden');
-        displayAppointments(filteredAppointments, patientHistoryResults, false); // Pass false to hide delete button
+        displayHistoryTable(filteredAppointments);
     }
 
     // Setup real-time listener for appointments
@@ -372,10 +384,10 @@
                        apptDate.getMonth() === today.getMonth() &&
                        apptDate.getDate() === today.getDate();
             });
-            displayAppointments(todaysAppointments, todaysAppointmentsList, true); // Pass true to show delete button
+            displayAppointmentCards(todaysAppointments, todaysAppointmentsList, true);
             
             // Display all appointments in the full history list
-            displayAppointments(allAppointments, allAppointmentsList, true); // Pass true to show delete button
+            displayAppointmentCards(allAppointments, allAppointmentsList, true);
 
             // Re-run the search on every data change to update the displayed history
             handleSearch();
@@ -385,8 +397,8 @@
         });
     }
 
-    // Function to display appointments in the UI
-    function displayAppointments(appointments, containerElement, showDeleteButton = true) {
+    // Function to display appointments in card format
+    function displayAppointmentCards(appointments, containerElement, showDeleteButton = true) {
         if (containerElement === todaysAppointmentsList) {
             loadingIndicator.classList.add('hidden');
         } else if (containerElement === allAppointmentsList) {
@@ -394,11 +406,6 @@
         }
         
         containerElement.innerHTML = ''; // Clear previous list
-
-        // Add a count to the history section
-        if (containerElement === patientHistoryResults) {
-            patientHistoryResults.innerHTML = `<h4 class="text-xl font-semibold text-gray-700 mb-2">${appointments.length} Appointments Found</h4>`;
-        }
         
         if (appointments.length === 0) {
             containerElement.innerHTML = `<div class="text-center text-gray-500 py-8">No appointments found.</div>`;
@@ -422,14 +429,40 @@
             containerElement.appendChild(dateHeader);
 
             appts.forEach(appointment => {
-                const appointmentCard = createAppointmentCard(appointment, showDeleteButton);
+                const appointmentCard = createAppointmentCardElement(appointment, showDeleteButton);
                 containerElement.appendChild(appointmentCard);
             });
         });
     }
 
-    // Helper function to create an appointment card
-    function createAppointmentCard(appointment, showDeleteButton) {
+    // Function to display appointments in a compact table format
+    function displayHistoryTable(appointments) {
+        patientHistoryTableBody.innerHTML = ''; // Clear table body
+
+        if (appointments.length === 0) {
+            patientHistoryTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-4">No matching history found.</td></tr>`;
+            return;
+        }
+
+        appointments.forEach(appt => {
+            const datetime = appt.timestamp.toDate();
+            const formattedDate = datetime.toLocaleDateString('en-US');
+            const formattedTime = datetime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            const row = document.createElement('tr');
+            row.classList.add('hover:bg-gray-100');
+            row.innerHTML = `
+                <td class="px-3 py-2 whitespace-nowrap">${formattedDate}</td>
+                <td class="px-3 py-2 whitespace-nowrap">${formattedTime}</td>
+                <td class="px-3 py-2 whitespace-nowrap">${appt.patientName}</td>
+                <td class="px-3 py-2 whitespace-nowrap">${appt.contactNumber}</td>
+            `;
+            patientHistoryTableBody.appendChild(row);
+        });
+    }
+
+    // Helper function to create an appointment card element
+    function createAppointmentCardElement(appointment, showDeleteButton) {
         const datetime = appointment.timestamp.toDate();
         const formattedDate = datetime.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         const formattedDay = datetime.toLocaleDateString('en-US', { weekday: 'long' });
