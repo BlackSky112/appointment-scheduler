@@ -3,10 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dr. Khurram Ali's Appointment Scheduler</title>
+    <title>Dr. Khurram Ali's Appointment Scheduler (Simple Setup)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase CDN Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Expose Firebase services to the global scope for use in the main script
+        window.firebase = {
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, doc, addDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy, limit, getDocs
+        };
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -32,14 +44,13 @@
             padding: 20px;
             border: 1px solid #888;
             width: 80%;
-            max-width: 400px;
+            max-width: 550px;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        /* Simple spinner animation */
         .spinner {
             border: 2px solid rgba(0, 0, 0, 0.1);
-            border-left-color: #1a202c; /* tailwind's gray-900 */
+            border-left-color: #1a202c; 
             border-radius: 50%;
             width: 1rem;
             height: 1rem;
@@ -57,12 +68,12 @@
         Dr. Khurram Ali
     </h1>
     <h2 class="text-xl text-gray-600 text-center mb-8">
-        Appointment Scheduler
+        Appointment Scheduler (Realtime Sync)
     </h2>
 
     <div id="auth-status" class="mb-4 text-sm text-center text-gray-500 flex items-center justify-center space-x-2">
         <div class="spinner"></div>
-        <span>Authenticating...</span>
+        <span>Connecting to Firestore and authenticating...</span>
     </div>
 
     <!-- Main Content Area -->
@@ -71,18 +82,18 @@
         <div class="w-full md:w-1/2">
             <!-- Appointment Booking Form -->
             <div class="bg-gray-50 p-6 rounded-lg shadow-inner mb-8">
-                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Book a New Appointment</h3>
+                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Book/Edit Appointment</h3>
                 <form id="appointmentForm" class="grid grid-cols-1 gap-4">
                     <div>
                         <label for="patientName" class="block text-sm font-medium text-gray-700">
-                            Patient Name <span class="text-red-500">*</span>
+                            Patient Name (Type to search history below) <span class="text-red-500">*</span>
                         </label>
                         <input type="text" id="patientName" name="patientName" required
                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
                     </div>
                     <div>
-                        <label for="contactNumber" class="block text-sm font-medium text-gray-700">Contact Number</label>
-                        <input type="tel" id="contactNumber" name="contactNumber"
+                        <label for="contactNumber" class="block text-sm font-medium text-gray-700">Contact Number (11 Digits, also searchable)</label>
+                        <input type="tel" id="contactNumber" name="contactNumber" pattern="[0-9]{11}"
                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
                     </div>
                     <div>
@@ -116,9 +127,10 @@
         
         <!-- Right Column: Patient History Search and All Patients -->
         <div class="w-full md:w-1/2">
-            <!-- Patient History Search and Results -->
+            <!-- Patient History Search and Results (Shows up dynamically) -->
             <div id="patientHistorySection" class="hidden">
-                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Patient History</h3>
+                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Patient History Search Results</h3>
+                <div id="historyCount" class="text-sm text-gray-600 mb-2"></div>
                 <div class="overflow-x-auto bg-gray-50 rounded-lg shadow-inner">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-200">
@@ -143,7 +155,7 @@
 
             <!-- All Patients Section -->
             <div id="allPatientsSection" class="mt-8">
-                <h3 class="text-2xl font-semibold text-gray-700 mb-4">All Patients</h3>
+                <h3 class="text-2xl font-semibold text-gray-700 mb-4">All Appointments (Full List)</h3>
                 <div id="allPatientsList" class="space-y-4">
                     <div class="text-center text-gray-500 py-8">Loading all patients...</div>
                 </div>
@@ -157,58 +169,32 @@
     <div class="modal-content">
         <div id="modal-message" class="text-center text-gray-700 mb-4"></div>
         <div class="flex justify-center space-x-4">
-            <button id="modal-confirm" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 focus:outline-none">Confirm</button>
-            <button id="modal-cancel" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 focus:outline-none">Cancel</button>
-            <button id="modal-ok" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 focus:outline-none">OK</button>
+            <button id="modal-confirm" class="bg-red-500 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-red-600 focus:outline-none">Confirm</button>
+            <button id="modal-cancel" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-400 focus:outline-none">Cancel</button>
+            <button id="modal-ok" class="bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-indigo-700 focus:outline-none">OK</button>
         </div>
     </div>
 </div>
 
-
-<!-- Firebase SDKs -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-    import { getFirestore, doc, collection, addDoc, onSnapshot, deleteDoc, updateDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
-
-    // You can remove this line in production to reduce console noise.
-    setLogLevel('debug');
-
-    // **YOUR FIREBASE CONFIGURATION**
-    // The configuration you provided is now here.
-    const firebaseConfig = {
-        apiKey: "AIzaSyBb1NCZ1nGrNPUfevlew4iyGVbbuUnuXmw",
-        authDomain: "appointment-scheduler-5fafc.firebaseapp.com",
-        projectId: "appointment-scheduler-5fafc",
-        storageBucket: "appointment-scheduler-5fafc.firebasestorage.app",
-        messagingSenderId: "1080947077121",
-        appId: "1:1080947077121:web:e4bec6b05ef09a42a8d000"
-    };
-
-    // The following variables are used for authentication and database paths.
-    // You do not need to change these.
-    const appId = 'default-app-id';
-    const initialAuthToken = null; 
-
-    let app, auth, db, userId;
-    let authReady = false;
-    let allAppointments = []; // Store all appointments for client-side filtering
-    let filteredAppointments = []; // Store the filtered results for pagination
+<script>
+    // --- 1. FIRESTORE CONFIGURATION (Automatic) ---
+    // The variables __firebase_config, __initial_auth_token, and __app_id are provided automatically by the environment.
+    let db, auth, userId, appId;
+    const APPOINTMENTS_COLLECTION = 'appointments';
+    const monthAbbreviations = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // --- 2. GLOBAL STATE & UI ELEMENTS (for brevity) ---
+    let allAppointments = []; 
+    let filteredAppointments = []; 
     let currentPage = 1;
     let editingDocId = null;
     const patientsPerPage = 10;
-    const monthAbbreviations = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    // UI Elements
+    
+    // UI elements (defined in the HTML)
     const authStatus = document.getElementById('auth-status');
     const appointmentForm = document.getElementById('appointmentForm');
     const todaysAppointmentsList = document.getElementById('todaysAppointmentsList');
     const loadingIndicator = document.getElementById('loading');
-    const modal = document.getElementById('customModal');
-    const modalMessage = document.getElementById('modal-message');
-    const modalConfirm = document.getElementById('modal-confirm');
-    const modalCancel = document.getElementById('modal-cancel');
-    const modalOk = document.getElementById('modal-ok');
     const spinnerElement = authStatus.querySelector('.spinner');
     const authStatusText = authStatus.querySelector('span');
     const patientNameInput = document.getElementById('patientName');
@@ -221,10 +207,15 @@
     const allPatientsList = document.getElementById('allPatientsList');
     const formSubmitBtn = document.getElementById('formSubmitBtn');
     const formCancelEditBtn = document.getElementById('formCancelEditBtn');
+    const historyCount = document.getElementById('historyCount');
+    const modal = document.getElementById('customModal');
+    const modalMessage = document.getElementById('modal-message');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    const modalOk = document.getElementById('modal-ok');
 
-    // Function to show the custom modal
     function showModal(message, type, onConfirm) {
-        modalMessage.textContent = message;
+        modalMessage.innerHTML = message;
         modalConfirm.style.display = 'none';
         modalCancel.style.display = 'none';
         modalOk.style.display = 'none';
@@ -241,76 +232,91 @@
         modal.style.display = 'block';
     }
 
-    // Initialize Firebase and Authentication
-    async function initFirebase() {
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
+    // --- 3. FIRESTORE INITIALIZATION & AUTHENTICATION ---
+    async function initFirestore() {
+        if (typeof window.firebase === 'undefined') {
+            authStatusText.textContent = "Error: Firebase libraries not loaded.";
+            spinnerElement.classList.add('hidden');
+            return;
+        }
 
-            // Listen for auth state changes
-            onAuthStateChanged(auth, async (user) => {
+        try {
+            // 1. Initialize App
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            const app = firebase.initializeApp(firebaseConfig);
+            db = firebase.getFirestore(app);
+            auth = firebase.getAuth(app);
+            
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+            // 2. Authenticate User
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            
+            if (initialAuthToken) {
+                await firebase.signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await firebase.signInAnonymously(auth);
+            }
+            
+            firebase.onAuthStateChanged(auth, (user) => {
                 if (user) {
                     userId = user.uid;
+                    authStatusText.textContent = `Authenticated. User ID: ${userId.substring(0, 8)}...`;
                     spinnerElement.classList.add('hidden');
-                    authStatusText.textContent = `Authenticated. Your User ID: ${userId}`;
-                    authReady = true;
-                    // Start listening for appointments only after auth is ready
-                    setupAppointmentListener();
+                    setupAppointmentListener(); // Start listening after auth is ready
                 } else {
-                    spinnerElement.classList.remove('hidden');
-                    authStatusText.textContent = `Not authenticated. Attempting anonymous sign-in...`;
-                    // Try to sign in anonymously if no custom token is provided
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (error) {
-                        console.error("Anonymous sign-in failed:", error);
-                        authStatusText.textContent = `Authentication failed. Check console.`;
-                        spinnerElement.classList.add('hidden');
-                        showModal("Anonymous sign-in failed. Please check your console.", "alert");
-                    }
+                    authStatusText.textContent = `Authentication required.`;
+                    spinnerElement.classList.add('hidden');
                 }
             });
 
-            // If a custom token is available, sign in with it
-            if (initialAuthToken) {
-                try {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } catch (error) {
-                    console.error("Custom token sign-in failed:", error);
-                    showModal("Failed to sign in with custom token. Attempting anonymous sign-in.", "alert");
-                    // Fallback to anonymous sign-in if custom token fails
-                    await signInAnonymously(auth);
-                }
-            }
-
         } catch (error) {
-            console.error("Firebase initialization failed:", error);
-            authStatusText.textContent = `Initialization failed. Check console.`;
+            console.error("Firebase Initialization Error:", error);
+            authStatusText.textContent = `Initialization Failed: ${error.message}`;
             spinnerElement.classList.add('hidden');
-            showModal("Failed to initialize Firebase. Please check your console for details.", "alert");
         }
     }
+    
+    // Determines the storage path for the appointments collection (private data)
+    function getAppointmentsCollectionRef() {
+        if (!db || !userId) return null;
+        // Path: /artifacts/{appId}/users/{userId}/appointments
+        return firebase.collection(db, 'artifacts', appId, 'users', userId, APPOINTMENTS_COLLECTION);
+    }
 
-    // Function to handle form submission (Add or Edit)
+    // --- 4. FIRESTORE DATA LOGIC ---
+    
+    // Setup real-time listener for appointments
+    function setupAppointmentListener() {
+        const appointmentsRef = getAppointmentsCollectionRef();
+        if (!appointmentsRef) return;
+
+        // Use onSnapshot for real-time updates
+        firebase.onSnapshot(appointmentsRef, (snapshot) => {
+            const data = [];
+            snapshot.forEach(doc => {
+                data.push({ id: doc.id, ...doc.data() });
+            });
+            updateLocalData(data);
+        }, (error) => {
+            console.error("Error listening to Firestore:", error);
+            showModal(`Realtime data sync failed. Error: ${error.message}`, "alert");
+        });
+    }
+
     async function handleFormSubmit(event) {
         event.preventDefault();
-        if (!authReady || !userId) {
-            showModal("Authentication not complete. Please wait a moment.", "alert");
-            return;
-        }
+        const appointmentsRef = getAppointmentsCollectionRef();
+        if (!appointmentsRef) return showModal("Database not ready. Please wait for authentication.", "alert");
 
         const patientName = appointmentForm.patientName.value.trim();
         const contactNumber = appointmentForm.contactNumber.value.trim();
         const appointmentDatetime = appointmentForm.appointmentDatetime.value;
 
-        // Basic validation for required fields
         if (!patientName || !appointmentDatetime) {
             showModal("Please fill in all required fields (marked with *).", "alert");
             return;
         }
-
-        // Validate contact number if entered
         if (contactNumber.length > 0 && contactNumber.length !== 11) {
             showModal("The contact number must be exactly 11 digits long.", "alert");
             return;
@@ -319,80 +325,108 @@
         const appointmentData = {
             patientName: patientName,
             contactNumber: contactNumber,
-            timestamp: new Date(appointmentDatetime),
-            createdAt: new Date()
+            // Store the ISO string directly for Firebase
+            timestamp: appointmentDatetime, 
+            createdAt: new Date().toISOString()
         };
 
         try {
             if (editingDocId) {
                 // Update existing appointment
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', editingDocId);
-                await updateDoc(docRef, appointmentData);
-                showModal("Appointment updated successfully!", "alert");
+                const docRef = firebase.doc(appointmentsRef, editingDocId);
+                await firebase.updateDoc(docRef, appointmentData);
+                showModal("Appointment updated successfully! Changes will sync.", "alert");
                 resetForm();
             } else {
                 // Add new appointment
-                const appointmentsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'appointments');
-                await addDoc(appointmentsColRef, appointmentData);
-                showModal("Appointment booked successfully!", "alert");
+                await firebase.addDoc(appointmentsRef, appointmentData);
+                showModal("Appointment booked successfully! Changes will sync.", "alert");
                 appointmentForm.reset();
             }
         } catch (error) {
-            console.error("Error handling document:", error);
-            showModal("Failed to save appointment. Please try again.", "alert");
+            console.error("Error saving appointment:", error);
+            showModal(`Failed to save appointment. Error: ${error.message}`, "alert");
         }
     }
 
-    // Function to delete an appointment
     function deleteAppointment(docId) {
-        showModal("Are you sure you want to delete this appointment?", "confirm", async (confirmed) => {
+        showModal("Are you sure you want to delete this appointment? This action is permanent and will sync to all devices.", "confirm", async (confirmed) => {
             if (confirmed) {
-                if (!authReady || !userId) {
-                    showModal("Authentication not complete. Please wait a moment.", "alert");
-                    return;
-                }
+                const appointmentsRef = getAppointmentsCollectionRef();
+                if (!appointmentsRef) return;
                 try {
-                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'appointments', docId);
-                    await deleteDoc(docRef);
+                    const docRef = firebase.doc(appointmentsRef, docId);
+                    await firebase.deleteDoc(docRef);
                     showModal("Appointment deleted successfully!", "alert");
                 } catch (error) {
-                    console.error("Error removing document: ", error);
-                    showModal("Failed to delete appointment. Please try again.", "alert");
+                    console.error("Error removing appointment: ", error);
+                    showModal(`Failed to delete appointment. Error: ${error.message}`, "alert");
                 }
             }
         });
     }
 
-    // Function to handle the search input and filter appointments
-    function handleSearch() {
-        const searchTerm = (patientNameInput.value.trim() + ' ' + contactNumberInput.value.trim()).toLowerCase();
+    // Function to update local array and refresh UI
+    function updateLocalData(data) {
+        // Convert the timestamp string back to Date objects for local sorting/filtering
+        allAppointments = data.map(appt => ({
+            ...appt,
+            timestamp: new Date(appt.timestamp) 
+        }));
 
-        // If search term is empty, hide the history section AND clear the table.
-        if (searchTerm.length === 0) {
+        // Sort all appointments by timestamp (most recent first)
+        allAppointments.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Filter and display today's appointments
+        const today = new Date();
+        const todaysAppointments = allAppointments.filter(appt => {
+            const apptDate = appt.timestamp;
+            return apptDate.getFullYear() === today.getFullYear() &&
+                   apptDate.getMonth() === today.getMonth() &&
+                   apptDate.getDate() === today.getDate();
+        });
+        
+        displayAppointmentCards(todaysAppointments, todaysAppointmentsList, false); 
+        
+        // Re-run the search on every data change to update the displayed history
+        handleSearch();
+
+        // Display all patients (full list)
+        displayAllPatients(allAppointments);
+    }
+    
+    // --- 5. UI/SEARCH/PAGINATION LOGIC (Identical to previous versions) ---
+
+    function handleSearch() {
+        const patientSearchTerm = patientNameInput.value.trim().toLowerCase();
+        const contactSearchTerm = contactNumberInput.value.trim().toLowerCase();
+
+        if (patientSearchTerm.length === 0 && contactSearchTerm.length === 0) {
             patientHistorySection.classList.add('hidden');
-            patientHistoryTableBody.innerHTML = ''; // Explicitly clear the table body
+            patientHistoryTableBody.innerHTML = ''; 
+            historyCount.textContent = '';
             return;
         }
+        
+        patientHistorySection.classList.remove('hidden');
 
-        const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
+        const combinedSearchTerm = patientSearchTerm + ' ' + contactSearchTerm;
+        const searchWords = combinedSearchTerm.split(/\s+/).filter(word => word.length > 0);
 
         filteredAppointments = allAppointments.filter(appt => {
             const patientNameLower = appt.patientName.toLowerCase();
             const contactNumberLower = appt.contactNumber ? appt.contactNumber.toLowerCase() : '';
             
-            // Check if every search word exists in the combined name or contact
             return searchWords.every(word => {
                 const combinedData = (patientNameLower + ' ' + contactNumberLower);
                 return combinedData.includes(word);
             });
         });
         
-        currentPage = 1; // Reset to the first page for a new search
-        patientHistorySection.classList.remove('hidden');
+        currentPage = 1; 
         displayHistoryTable();
     }
 
-    // Function to go to the next page
     function nextPage() {
         const totalPages = Math.ceil(filteredAppointments.length / patientsPerPage);
         if (currentPage < totalPages) {
@@ -400,8 +434,6 @@
             displayHistoryTable();
         }
     }
-
-    // Function to go to the previous page
     function prevPage() {
         if (currentPage > 1) {
             currentPage--;
@@ -409,102 +441,39 @@
         }
     }
 
-    // Setup real-time listener for appointments
-    function setupAppointmentListener() {
-        if (!authReady || !userId) return;
-
-        const appointmentsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'appointments');
-
-        // Listen to real-time updates
-        onSnapshot(appointmentsColRef, (querySnapshot) => {
-            allAppointments = []; // Clear the global array
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                allAppointments.push({
-                    id: doc.id,
-                    ...data
-                });
-            });
-
-            // Sort all appointments by timestamp
-            allAppointments.sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate());
-            
-            // Display today's appointments in the main list
-            const today = new Date();
-            const todaysAppointments = allAppointments.filter(appt => {
-                const apptDate = appt.timestamp.toDate();
-                return apptDate.getFullYear() === today.getFullYear() &&
-                       apptDate.getMonth() === today.getMonth() &&
-                       apptDate.getDate() === today.getDate();
-            });
-            displayAppointmentCards(todaysAppointments, todaysAppointmentsList);
-            
-            // Re-run the search on every data change to update the displayed history
-            handleSearch();
-
-            // Display all patients in the new section
-            displayAllPatients(allAppointments);
-        }, (error) => {
-            console.error("Error getting real-time appointments:", error);
-            showModal("Failed to load appointments. Please check your connection.", "alert");
-        });
-    }
-
-    // Function to display appointments in card format
-    function displayAppointmentCards(appointments, containerElement) {
+    function displayAppointmentCards(appointments, containerElement, showActions) {
         if (containerElement === todaysAppointmentsList) {
             loadingIndicator.classList.add('hidden');
         }
-        
-        containerElement.innerHTML = ''; // Clear previous list
-        
+        containerElement.innerHTML = '';
         if (appointments.length === 0) {
             containerElement.innerHTML = `<div class="text-center text-gray-500 py-8">No appointments found.</div>`;
             return;
         }
-        
-        const groupedAppointments = new Map();
-        appointments.forEach(appt => {
-            const date = appt.timestamp.toDate();
-            const dateKey = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            if (!groupedAppointments.has(dateKey)) {
-                groupedAppointments.set(dateKey, []);
-            }
-            groupedAppointments.get(dateKey).push(appt);
-        });
-
-        groupedAppointments.forEach((appts, dateKey) => {
-            const dateHeader = document.createElement('h4');
-            dateHeader.classList.add('text-lg', 'font-semibold', 'text-gray-700', 'mt-6', 'mb-2');
-            dateHeader.textContent = dateKey;
-            containerElement.appendChild(dateHeader);
-
-            appts.forEach(appointment => {
-                const appointmentCard = createAppointmentCardElement(appointment);
-                containerElement.appendChild(appointmentCard);
-            });
+        appointments.sort((a, b) => a.timestamp - b.timestamp);
+        appointments.forEach(appointment => {
+            const appointmentCard = createAppointmentCardElement(appointment, showActions);
+            containerElement.appendChild(appointmentCard);
         });
     }
 
-    // Function to display appointments in a compact table format with pagination
     function displayHistoryTable() {
-        patientHistoryTableBody.innerHTML = ''; // Clear table body
-
-        const totalPages = Math.ceil(filteredAppointments.length / patientsPerPage);
+        patientHistoryTableBody.innerHTML = '';
+        const totalAppointments = filteredAppointments.length;
+        historyCount.textContent = `Total appointments found for this patient: ${totalAppointments}`;
+        const totalPages = Math.ceil(totalAppointments / patientsPerPage);
         const start = (currentPage - 1) * patientsPerPage;
         const end = start + patientsPerPage;
         const appointmentsToShow = filteredAppointments.slice(start, end);
 
-        if (appointmentsToShow.length === 0) {
-            patientHistoryTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-4">No matching history found.</td></tr>`;
-            prevPageBtn.disabled = true;
-            nextPageBtn.disabled = true;
-            pageInfo.textContent = '';
-            return;
+        if (appointmentsToShow.length === 0 && (patientNameInput.value.length > 0 || contactNumberInput.value.length > 0)) {
+             patientHistoryTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-4">No matching history found.</td></tr>`;
+        } else if (appointmentsToShow.length === 0) {
+            patientHistoryTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-4">Start typing name or contact number to view history.</td></tr>`;
         }
 
         appointmentsToShow.forEach(appt => {
-            const datetime = appt.timestamp.toDate();
+            const datetime = appt.timestamp;
             const day = datetime.getDate();
             const month = monthAbbreviations[datetime.getMonth()];
             const year = datetime.getFullYear();
@@ -522,13 +491,11 @@
             patientHistoryTableBody.appendChild(row);
         });
 
-        // Update pagination controls
-        prevPageBtn.disabled = currentPage === 1;
-        nextPageBtn.disabled = currentPage === totalPages;
-        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+        prevPageBtn.disabled = currentPage === 1 || totalAppointments === 0;
+        nextPageBtn.disabled = currentPage === totalPages || totalAppointments === 0;
+        pageInfo.textContent = totalAppointments > 0 ? `Page ${currentPage} of ${totalPages}` : '';
     }
 
-    // New function to display all patients in cards
     function displayAllPatients(appointments) {
         allPatientsList.innerHTML = '';
         if (appointments.length === 0) {
@@ -536,34 +503,47 @@
             return;
         }
         
-        appointments.forEach(appointment => {
-            const appointmentCard = createAppointmentCardElement(appointment); // Show actions
-            allPatientsList.appendChild(appointmentCard);
+        const groupedAppointments = new Map();
+        appointments.forEach(appt => {
+            const dateKey = appt.timestamp.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            if (!groupedAppointments.has(dateKey)) {
+                groupedAppointments.set(dateKey, []);
+            }
+            groupedAppointments.get(dateKey).push(appt);
+        });
+
+        const sortedDateKeys = Array.from(groupedAppointments.keys()).sort((a, b) => new Date(b) - new Date(a));
+
+        sortedDateKeys.forEach(dateKey => {
+            const dateHeader = document.createElement('h4');
+            dateHeader.classList.add('text-lg', 'font-semibold', 'text-gray-700', 'mt-6', 'mb-2');
+            dateHeader.textContent = dateKey;
+            allPatientsList.appendChild(dateHeader);
+
+            groupedAppointments.get(dateKey).sort((a, b) => a.timestamp - b.timestamp).forEach(appointment => {
+                const appointmentCard = createAppointmentCardElement(appointment, true); 
+                allPatientsList.appendChild(appointmentCard);
+            });
         });
     }
 
-    // Function to populate the form for editing an appointment
     function editAppointment(appointment) {
         editingDocId = appointment.id;
         patientNameInput.value = appointment.patientName;
         contactNumberInput.value = appointment.contactNumber;
         
-        // Format the date for the datetime-local input
-        const datetime = appointment.timestamp.toDate();
+        const datetime = appointment.timestamp;
         const formattedDatetime = `${datetime.getFullYear()}-${(datetime.getMonth() + 1).toString().padStart(2, '0')}-${datetime.getDate().toString().padStart(2, '0')}T${datetime.getHours().toString().padStart(2, '0')}:${datetime.getMinutes().toString().padStart(2, '0')}`;
         document.getElementById('appointmentDatetime').value = formattedDatetime;
 
-        // Change form state
         formSubmitBtn.textContent = 'Save Changes';
         formSubmitBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
         formSubmitBtn.classList.add('bg-green-600', 'hover:bg-green-700');
         formCancelEditBtn.style.display = 'inline-block';
         
-        // Scroll to the top of the form
         appointmentForm.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Function to reset the form state to new appointment mode
     function resetForm() {
         appointmentForm.reset();
         editingDocId = null;
@@ -571,56 +551,57 @@
         formSubmitBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
         formSubmitBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
         formCancelEditBtn.style.display = 'none';
+        handleSearch();
     }
 
-    // Helper function to create an appointment card element
-    function createAppointmentCardElement(appointment) {
-        const datetime = appointment.timestamp.toDate();
+    function createAppointmentCardElement(appointment, showActions = false) {
+        const datetime = appointment.timestamp;
         const formattedDate = datetime.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         const formattedDay = datetime.toLocaleDateString('en-US', { weekday: 'long' });
         const formattedTime = datetime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
         const appointmentCard = document.createElement('div');
-        appointmentCard.classList.add('bg-gray-50', 'rounded-lg', 'shadow-sm', 'p-4', 'flex', 'flex-col', 'md:flex-row', 'justify-between', 'items-start', 'md:items-center');
+        appointmentCard.classList.add('bg-white', 'rounded-lg', 'shadow', 'p-4', 'flex', 'flex-col', 'md:flex-row', 'justify-between', 'items-start', 'md:items-center', 'border', 'border-gray-200');
         
-        const actionsHTML = `
-            <div class="flex space-x-2 mt-2 md:mt-0">
-                <button class="edit-btn bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-600 transition-colors duration-200">
-                    Edit
-                </button>
-                <button class="delete-btn bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors duration-200">
-                    Delete
-                </button>
-            </div>
-        `;
+        let actionsHTML = '';
+        if (showActions) {
+             actionsHTML = `
+                <div class="flex space-x-2 mt-3 md:mt-0">
+                    <button class="edit-btn bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium hover:bg-green-600 transition-colors duration-200 shadow-md">
+                        Edit
+                    </button>
+                    <button class="delete-btn bg-red-500 text-white px-3 py-1 rounded-full text-sm font-medium hover:bg-red-600 transition-colors duration-200 shadow-md">
+                        Delete
+                    </button>
+                </div>
+            `;
+        }
 
         appointmentCard.innerHTML = `
-            <div class="mb-2 md:mb-0">
+            <div class="mb-1 md:mb-0">
                 <p class="text-lg font-semibold text-gray-800">${appointment.patientName}</p>
                 <p class="text-sm text-gray-600">${formattedDate} (${formattedDay}) at ${formattedTime}</p>
-                <p class="text-sm text-gray-600">Contact: ${appointment.contactNumber}</p>
+                <p class="text-xs text-gray-500">${appointment.contactNumber ? 'Contact: ' + appointment.contactNumber : 'No contact'}</p>
             </div>
             ${actionsHTML}
         `;
         
-        const editButton = appointmentCard.querySelector('.edit-btn');
-        editButton.addEventListener('click', () => editAppointment(appointment));
-        
-        const deleteButton = appointmentCard.querySelector('.delete-btn');
-        deleteButton.addEventListener('click', () => deleteAppointment(appointment.id));
+        if (showActions) {
+            appointmentCard.querySelector('.edit-btn').addEventListener('click', () => editAppointment(appointment));
+            appointmentCard.querySelector('.delete-btn').addEventListener('click', () => deleteAppointment(appointment.id));
+        }
 
         return appointmentCard;
     }
 
-    // Attach event listeners
-    window.addEventListener('load', initFirebase);
+    // --- 6. EVENT LISTENERS ---
+    window.addEventListener('load', initFirestore);
     appointmentForm.addEventListener('submit', handleFormSubmit);
     patientNameInput.addEventListener('input', handleSearch);
     contactNumberInput.addEventListener('input', handleSearch);
-    prevPageBtn.addEventListener('click', nextPage);
+    prevPageBtn.addEventListener('click', prevPage);
     nextPageBtn.addEventListener('click', nextPage);
     formCancelEditBtn.addEventListener('click', resetForm);
-
 </script>
 </body>
 </html>
